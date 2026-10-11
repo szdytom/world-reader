@@ -1,0 +1,3 @@
+PP-OCRv6 Tiny detection and recognition models: PaddlePaddle Authors, Apache-2.0.
+https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_det_onnx
+https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx
