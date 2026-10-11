@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dist-pages/
+.venv/
+__pycache__/
+.pytest_cache/
+models/
+public/runtime/
+public/models/
+*.pt
+*.onnx
+*.onnx.json
+*.tsbuildinfo
+test-results/
+playwright-report/
+.env

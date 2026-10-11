@@ -1,0 +1,60 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: #192e3a; background: #e8edf0; font-synthesis: none;
+  --paper: #fafcfd; --ink: #192e3a; --muted: #778895; --blue: #3763d5; --camera: #17232b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, select { font: inherit; }
+button { cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, select:focus-visible { outline: 3px solid #82aaff; outline-offset: 3px; }
+h1, p { margin: 0; }
+.reader {
+  width: 100%; max-width: 800px; height: 100vh; height: 100dvh;
+  margin: 0 auto; background: var(--paper); display: flex; flex-direction: column;
+}
+.reader-header { display: flex; align-items: center; justify-content: space-between; padding: calc(17px + env(safe-area-inset-top)) 22px 17px; flex-shrink: 0; }
+.reader-header h1 { font-size: 17px; font-weight: 650; letter-spacing: .6px; }
+.status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.status i { width: 5px; height: 5px; background: #a7b4be; border-radius: 50%; }
+.status.live i { background: var(--blue); }
+.viewfinder { position: relative; flex: 1; min-height: 160px; background: var(--camera); overflow: hidden; }
+.viewfinder video, .segmentation { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
+.segmentation { pointer-events: none; }
+.camera-empty, .camera-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+.camera-empty { color: #8c9eab; }
+.camera-empty p { font-size: 13px; letter-spacing: .5px; }
+.camera-loading { background: #17232bed; color: #d9e5ee; }
+.camera-loading p { font-size: 12px; }
+.camera-tools { position: absolute; top: 14px; right: 14px; display: flex; gap: 8px; }
+.camera-tools button { width: 42px; height: 42px; border: 1px solid #ffffff25; border-radius: 50%; background: #17232bb3; color: #fff; display: grid; place-items: center; }
+.camera-tools button:hover { background: #314957; }
+.frame-timing { position: absolute; bottom: 14px; left: 16px; color: #dae3e9; background: #17232bb3; padding: 5px 8px; border-radius: 4px; font: 10px ui-monospace, 'SFMono-Regular', monospace; }
+.reader-controls { padding: 18px 22px calc(22px + env(safe-area-inset-bottom)); flex-shrink: 0; }
+.voice-options { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.voice-choice select { border: 0; background: transparent; color: var(--muted); font-size: 12px; padding: 6px 18px 6px 0; cursor: pointer; }
+.auto-read { display: flex; align-items: center; gap: 6px; border: 0; padding: 8px 0 8px 12px; background: none; color: var(--muted); font-size: 12px; }
+.auto-read[aria-pressed=true] { color: var(--blue); }
+.scene-caption { font-size: 17px; line-height: 1.65; min-height: 2.8em; max-height: 4.95em; overflow-y: auto; margin-bottom: 17px; }
+.primary-button { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px; border: 0; border-radius: 10px; background: var(--blue); color: #fff; font-size: 15px; font-weight: 550; }
+.primary-button:hover:not(:disabled) { background: #2c53ba; }
+.error-message, .service-note { font-size: 12px; line-height: 1.7; margin: 0 0 12px; }
+.error-message { color: #b23d32; }
+.service-note { color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (min-width: 820px) {
+  .reader { height: calc(100dvh - 48px); margin: 24px auto; border-radius: 14px; overflow: hidden; border: 1px solid #d8e1e7; }
+  .reader-header { padding: 19px 26px; }
+  .reader-controls { padding: 18px 26px 24px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .reader { display: grid; grid-template-columns: 1fr 290px; grid-template-rows: 50px 1fr; }
+  .reader-header { grid-column: 1 / -1; padding: 12px 20px; }
+  .viewfinder { min-height: 0; }
+  .reader-controls { align-self: center; padding: 15px; }
+  .scene-caption { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

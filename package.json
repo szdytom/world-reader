@@ -1,0 +1,33 @@
+{
+  "name": "world-reader",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/setup-assets.mjs",
+    "demo": "npm run build && .venv/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8000",
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && VITE_BASE_PATH=/world-reader/ VITE_STATIC_HOST=true vite build --outDir dist-pages",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "test:e2e": "node tests/prepare-camera.mjs && playwright test"
+  },
+  "dependencies": {
+    "@ultralytics/yolo": "0.0.51",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "onnxruntime-web": "1.27.0",
+    "@playwright/test": "^1.55.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.5",
+    "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^3.0.0"
+  }
+}
