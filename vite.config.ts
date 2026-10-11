@@ -43,7 +43,7 @@ export default defineConfig({
       globPatterns: ['**/*.{js,css,html,svg,png,jpg,json,wav}'],
       globIgnores: ['runtime/**', 'models/**'],
       runtimeCaching: [{
-        urlPattern: ({ url }) => url.pathname.startsWith(`${base}runtime/`),
+        urlPattern: new RegExp(`${base}runtime/`),
         handler: 'CacheFirst',
         options: { cacheName: 'world-reader-runtime-v1', cacheableResponse: { statuses: [200] } },
       }],
