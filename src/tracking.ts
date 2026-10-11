@@ -129,4 +129,8 @@ export class SceneReader {
     this.baseline = this.current.map(d => ({ ...d }));
     this.lastSpoken = now;
   }
+
+  defer(now: number) { this.lastSpoken = now; }
+
+  get hasObjects() { return this.current.length > 0; }
 }

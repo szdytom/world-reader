@@ -1,6 +1,6 @@
 # 世界阅读器
 
-面向手机的 PWA。Web Camera 持续播放视频，浏览器内使用 **`@ultralytics/yolo` + WASM** 做 YOLO11n 实例分割，通过 **Web Speech API** 自动朗读中文。整个应用为静态前端，无需语音后端或 Python。
+面向手机的 PWA。Web Camera 持续播放视频，浏览器内使用 **`@ultralytics/yolo` + WASM** 做 YOLO11n 实例分割，使用 **PP-OCRv6 Tiny + WASM** 识别路牌、标识等文字，通过 **Web Speech API** 自动朗读中文。整个应用为静态前端，无需后端或 Python。
 
 ## 手机上打开
 
@@ -12,9 +12,11 @@ GitHub Pages：https://szdytom.github.io/world-reader/
 
 语音优先选择设备的简体中文音色；音色及离线朗读能力取决于手机系统。识别和跟踪均在浏览器内完成，应用不上传或保存视频帧。
 
+「读文字」默认开启，新识别的文字优先朗读，例如「中间写着『中山路』」。同一文字不会连续重复；空格、标点和长文本的少量识别抖动会去重。较低置信度文字需重复确认。黄色框表示 OCR 文字区域。可关闭「读文字」，继续进行物体识别。
+
 ## 启动
 
-需要 Node.js 22+，首次准备模型需要 `curl`。
+需要 Node.js 22+，首次准备模型需要 `curl` 和 `tar`。
 
 ```sh
 npm install
@@ -44,7 +46,8 @@ npm run build:pages  # dist-pages/，用于 /world-reader/ 子目录
 - 应用外壳由 Service Worker 缓存。
 - ONNX 模型首次成功下载后写入 Cache API。
 - WASM 和配套模块从同源 `runtime/` 加载，首次使用后缓存，无 CDN 运行时依赖。
-- 缓存完成后可离线开启摄像头、分割、跟踪和生成描述。离线语音需设备安装中文音色。
+- OCR 的两个模型与 OpenCV.js 也从同源加载并缓存。OCR 首次额外下载约 16 MB，其中模型约 6 MB，OpenCV 约 10 MB。
+- 缓存完成后可离线开启摄像头、分割、跟踪、OCR 和生成描述。离线语音需设备安装中文音色。
 - 浏览器清理缓存、隐私模式或存储不足时，可能需要重新下载模型。
 
 ## 实现
@@ -59,15 +62,27 @@ SDK 默认 ORT 加载器通过 DOM 插入脚本，无法直接用于 Worker。`v
 
 这是适合低帧率 MVP 的轻量空间跟踪，未移植 Python 的 ByteTrack / BoT-SORT。遮挡、多人交叉、快速转动镜头或误分类仍可能造成 ID 切换。方向表示画面中的「左侧 / 中间 / 右侧」，不推断真实距离或物体的实际运动。
 
+## OCR
+
+采用 PaddleOCR 官方 `@paddleocr/paddleocr-js@0.4.2`，使用官方 PP-OCRv6 Tiny 检测与识别 ONNX。`scripts/setup-ocr-assets.mjs` 从固定 Hugging Face revision 下载模型和字典配置，打包为 SDK 所需的未压缩 ustar 文件。模型支持中文和英文；PaddleOCR.js、模型和 OpenCV 使用 Apache-2.0。
+
+`src/ocr.worker.ts` 在独立 Worker 中执行官方检测、透视裁剪和 CTC 识别。它与 YOLO 共用同版本的 ORT WASM 文件。桥接适配只处理 Worker 的 ImageData 输入、OpenCV 模块初始化和同源运行时路径，不重写模型算法。单线程 WASM 无需特殊响应头，可在 GitHub Pages 运行。
+
+OCR 在 YOLO 初始化后启动，每次取一帧，最长边最多 960 像素，检测最长边最多 640 像素。每轮完成后至少等待 2.5 秒，慢设备进一步降低扫描频率。关闭文字识别、关闭镜头或切换摄像头时终止旧 Worker，丢弃旧结果；OCR 故障不关闭摄像头或 YOLO。
+
+`src/textReader.ts` 管理文字播报：置信度低于 0.75 时忽略，低于 0.9 时至少两轮确认；同一可见文字只读一次，至少离开一分钟后重新出现才允许再次读。新文字优先于物体变化，但不会打断正在播放的语音。最多一次读三条文字，每条最多 32 字，未读条目保留到后续播报。屏幕展示当前 OCR 结果；语音显示最近播报内容。OCR 识别的是文字，不额外推断路牌图形、箭头方向或交通规则。
+
+远处小字、模糊、反光和快速移动会影响识别；靠近标识并稍停片刻更适合演示。RapidOCR 是成熟的多引擎 OCR 工具包，RapidOCRWeb 需要 Flask 服务；此应用选择官方 PaddleOCR.js，保持纯前端部署。
+
 ## 验证
 
 ```sh
 npm test
 npm run build
-# 需要 Chromium 和 ffmpeg，可省略 CHROMIUM_PATH 使用 Playwright 浏览器。
+# 需要 Chromium、ffmpeg、fontconfig 和中文字体，可省略 CHROMIUM_PATH 使用 Playwright 浏览器。
 CHROMIUM_PATH=/usr/bin/chromium npm run test:e2e
 ```
 
-单元测试覆盖跨帧身份、短暂漏检、单帧误检、方位抖动、差分播报和持续更新。浏览器测试将官方公交车样例转为模拟摄像头视频，实际运行 WASM，验证物体、掩膜、关闭镜头和离线重载。语音控制测试替代操作系统发声接口，验证自动播报与缺失结束事件后的恢复，不验证实际音色。
+单元测试覆盖跨帧身份、短暂漏检、单帧误检、方位抖动、差分播报，以及 OCR 确认、去重和变化内容。浏览器测试使用公交车样例和生成的中文路牌视频，实际运行 YOLO 与 PP-OCRv6 WASM，验证物体、掩膜、中文识别、自动文字朗读、关闭功能和离线重载。语音控制测试替代操作系统发声接口，不验证实际音色。
 
-参考：[Ultralytics 浏览器 SDK](https://github.com/ultralytics/inference/tree/main/web)、[Ultralytics 跟踪模式](https://docs.ultralytics.com/modes/track/)、[ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/)、[Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis)。上游 SDK / 模型采用 Ultralytics AGPL-3.0 授权。
+参考：[Ultralytics 浏览器 SDK](https://github.com/ultralytics/inference/tree/main/web)、[Ultralytics 跟踪模式](https://docs.ultralytics.com/modes/track/)、[ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/)、[Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis)、[PaddleOCR 浏览器部署](https://www.paddleocr.ai/main/version3.x/inference_deployment/cross_platform/browser.html)、[PP-OCRv6](https://www.paddleocr.ai/main/version3.x/algorithm/PP-OCRv6/PP-OCRv6.html)、[RapidOCRWeb](https://github.com/RapidAI/RapidOCRWeb)。Ultralytics SDK / 模型采用 AGPL-3.0 授权。

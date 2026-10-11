@@ -23,9 +23,30 @@ const workerRuntime = () => ({
   },
 });
 
+const ocrRuntime = () => ({
+  name: 'paddle-ocr-worker-runtime', enforce: 'pre' as const,
+  transform(code: string, id: string) {
+    if (!id.includes('@paddleocr/paddleocr-js/dist/index.mjs')) return;
+    const bridge = 'ensureServedFromHttp,\n      sourceToMat\n';
+    if (!code.includes(bridge)) throw new Error('PaddleOCR adapter changed; review the Worker bridge.');
+    return code
+      .replace('import cvModule from "@techstark/opencv-js";',
+        `const cvModule = import(/* @vite-ignore */ new URL(${JSON.stringify(`${base}runtime/opencv.js`)}, globalThis.location.origin).href).then(() => new Promise(resolve => {
+          const cv = globalThis.cv;
+          const ready = () => { delete cv.then; resolve(cv); };
+          if (cv.Mat) ready(); else cv.onRuntimeInitialized = ready;
+        }));`)
+      .replace('import("onnxruntime-web")', 'import("onnxruntime-web/wasm")')
+      .replace(bridge, 'ensureServedFromHttp,\n      sourceToMat: options.sourceToMat || sourceToMat\n')
+      // We supply the app's Worker; omit the SDK's unused prebuilt Worker bundle.
+      .replace(/function createDefaultWorker\(\) \{[\s\S]*?\n\}/,
+        'function createDefaultWorker() { throw new Error("Use the application OCR Worker."); }');
+  },
+});
+
 export default defineConfig({
   base,
-  plugins: [workerRuntime(), react(), VitePWA({
+  plugins: [workerRuntime(), ocrRuntime(), react(), VitePWA({
     registerType: 'autoUpdate',
     includeAssets: ['icons/*.png', 'icons/icon.svg'],
     manifest: {
@@ -46,10 +67,14 @@ export default defineConfig({
         urlPattern: new RegExp(`${base}runtime/`),
         handler: 'CacheFirst',
         options: { cacheName: 'world-reader-runtime-v1', cacheableResponse: { statuses: [200] } },
+      }, {
+        urlPattern: new RegExp(`${base}models/pp-ocrv6-.*\\.tar$`),
+        handler: 'CacheFirst',
+        options: { cacheName: 'world-reader-ocr-model-v1', cacheableResponse: { statuses: [200] } },
       }],
       maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
     },
   })],
-  worker: { format: 'es', plugins: () => [workerRuntime()] },
-  optimizeDeps: { exclude: ['@ultralytics/yolo'] },
+  worker: { format: 'es', plugins: () => [workerRuntime(), ocrRuntime()] },
+  optimizeDeps: { exclude: ['@ultralytics/yolo', '@paddleocr/paddleocr-js'] },
 });

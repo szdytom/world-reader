@@ -20,8 +20,8 @@ h1, p { margin: 0; }
 .status i { width: 5px; height: 5px; background: #a7b4be; border-radius: 50%; }
 .status.live i { background: var(--blue); }
 .viewfinder { position: relative; flex: 1; min-height: 160px; background: var(--camera); overflow: hidden; }
-.viewfinder video, .segmentation { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
-.segmentation { pointer-events: none; }
+.viewfinder video, .segmentation, .ocr-overlay { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
+.segmentation, .ocr-overlay { pointer-events: none; }
 .camera-empty, .camera-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
 .camera-empty { color: #8c9eab; }
 .camera-empty p { font-size: 13px; letter-spacing: .5px; }
@@ -34,6 +34,9 @@ h1, p { margin: 0; }
 .reader-controls { padding: 18px 22px calc(22px + env(safe-area-inset-bottom)); flex-shrink: 0; }
 .voice-options { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .voice-label { color: var(--muted); font-size: 12px; }
+.ocr-toggle { display: flex; align-items: center; gap: 5px; border: 0; padding: 8px 6px; background: none; color: var(--muted); font-size: 12px; }
+.ocr-toggle[aria-pressed=true] { color: var(--blue); }
+.ocr-caption { color: #655229; font-size: 12px; line-height: 1.6; max-height: 3.2em; overflow-y: auto; margin: -8px 0 12px; }
 .auto-read { display: flex; align-items: center; gap: 6px; border: 0; padding: 8px 0 8px 12px; background: none; color: var(--muted); font-size: 12px; }
 .auto-read[aria-pressed=true] { color: var(--blue); }
 .scene-caption { font-size: 17px; line-height: 1.65; min-height: 2.8em; max-height: 4.95em; overflow-y: auto; margin-bottom: 17px; }

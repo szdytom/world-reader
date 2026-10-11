@@ -1,18 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, LoaderCircle, Square, SwitchCamera, Volume2, VolumeX, X } from 'lucide-react';
+import { Camera, LoaderCircle, ScanText, Square, SwitchCamera, Volume2, VolumeX, X } from 'lucide-react';
 import { useCamera } from './useCamera';
 import { useSpeech } from './useSpeech';
 import { describeScene } from './scene';
 import { SceneReader } from './tracking';
+import { useOcr } from './useOcr';
+import { describeText, TextReader } from './textReader';
 
 export default function App() {
   const [autoRead, setAutoRead] = useState(true);
+  const [ocrEnabled, setOcrEnabled] = useState(true);
   const [online, setOnline] = useState(navigator.onLine);
   const camera = useCamera(0.45);
   const speech = useSpeech();
   const reader = useRef(new SceneReader());
+  const textReader = useRef(new TextReader());
+  const hasVisibleText = useRef(false);
+  const textOverlay = useRef<HTMLCanvasElement>(null);
   const [narration, setNarration] = useState('');
   const active = camera.status === 'live';
+  const ocr = useOcr(camera.video, active && camera.modelStatus === 'ready', ocrEnabled);
   const loading = camera.status === 'starting' || (active && camera.modelStatus === 'loading');
   const detections = camera.result?.detections ?? [];
   const text = camera.result
@@ -37,18 +44,55 @@ export default function App() {
   }, [camera.result]);
 
   useEffect(() => {
+    hasVisibleText.current = !!ocr.result?.lines.length;
+    if (ocr.result) textReader.current.observe(ocr.result.lines, Date.now());
+  }, [ocr.result]);
+
+  useEffect(() => {
     if (!active || !autoRead || speech.speaking || speech.error) return;
     const tick = () => {
       const now = Date.now();
+      const newText = ocrEnabled ? textReader.current.next(now) : null;
+      if (newText) {
+        if (speech.speak(newText.text)) {
+          textReader.current.commit(newText, now);
+          reader.current.defer(now);
+          setNarration(newText.text);
+        }
+        return;
+      }
+      // Readable signs are useful results; do not ask the user to move away.
+      if (ocrEnabled && hasVisibleText.current && !reader.current.hasObjects) return;
       const message = reader.current.next(now);
       if (message && speech.speak(message)) {
         reader.current.commit(now);
+        textReader.current.defer(now);
         setNarration(message);
       }
     };
     const interval = setInterval(tick, 500);
     return () => clearInterval(interval);
-  }, [active, autoRead, speech.speaking, speech.error, speech.speak]);
+  }, [active, autoRead, ocrEnabled, speech.speaking, speech.error, speech.speak]);
+
+  useEffect(() => {
+    const canvas = textOverlay.current;
+    if (!canvas) return;
+    const result = ocr.result;
+    canvas.width = result?.width ?? 0; canvas.height = result?.height ?? 0;
+    const context = canvas.getContext('2d');
+    if (!context || !result) return;
+    const font = Math.max(14, Math.round(result.width / 46));
+    context.font = `600 ${font}px system-ui`; context.lineWidth = 2;
+    context.strokeStyle = '#ffe079'; context.fillStyle = '#ffe079';
+    for (const line of result.lines) {
+      const [x1, y1, x2, y2] = line.box;
+      const x = x1 * result.width, y = y1 * result.height;
+      context.strokeRect(x, y, (x2 - x1) * result.width, (y2 - y1) * result.height);
+      const label = line.text.slice(0, 18);
+      const labelX = Math.max(0, Math.min(x, result.width - context.measureText(label).width));
+      context.fillText(label, labelX, Math.max(font + 2, y - 5));
+    }
+  }, [ocr.result]);
 
   useEffect(() => {
     const result = camera.result;
@@ -81,6 +125,7 @@ export default function App() {
 
   const start = () => {
     reader.current = new SceneReader(); setNarration('');
+    textReader.current = new TextReader();
     // Speak inside the tap gesture so mobile browsers allow subsequent narration.
     if (autoRead) speech.speak('开始观察。');
     else speech.stop();
@@ -88,8 +133,16 @@ export default function App() {
   };
   const stop = () => { camera.stop(); speech.stop(); setNarration(''); };
   const read = () => {
-    const message = describeScene(detections, 4);
-    if (speech.speak(message)) { reader.current.commit(Date.now()); setNarration(message); }
+    const lines = ocrEnabled ? ocr.result?.lines ?? [] : [];
+    const message = describeText(lines) || describeScene(detections, 4);
+    if (speech.speak(message)) {
+      if (lines.length) {
+        textReader.current.markRead(lines.slice(0, 3), Date.now());
+        reader.current.defer(Date.now());
+      } else reader.current.commit(Date.now());
+      textReader.current.defer(Date.now());
+      setNarration(message);
+    }
   };
   const status = !online ? '离线' : loading ? '准备中' : active ? '识别中' : '待开启';
 
@@ -101,9 +154,10 @@ export default function App() {
     <section className="viewfinder" aria-label="实时摄像头">
       <video ref={camera.video} muted playsInline aria-label="摄像头实时视频" />
       <canvas ref={camera.overlay} className="segmentation" aria-hidden="true" />
+      <canvas ref={textOverlay} className="ocr-overlay" aria-hidden="true" />
       {!active && <div className="camera-empty"><Camera size={36} strokeWidth={1.4} /><p>镜头尚未开启</p></div>}
       {active && <div className="camera-tools">
-        <button onClick={() => { speech.stop(); reader.current = new SceneReader(); setNarration(''); camera.switchCamera(); }} aria-label="切换摄像头"><SwitchCamera size={21} /></button>
+        <button onClick={() => { speech.stop(); reader.current = new SceneReader(); textReader.current = new TextReader(); setNarration(''); camera.switchCamera(); }} aria-label="切换摄像头"><SwitchCamera size={21} /></button>
         <button onClick={stop} aria-label="关闭镜头"><X size={22} /></button>
       </div>}
       {loading && <div className="camera-loading" role="status">
@@ -115,6 +169,12 @@ export default function App() {
     <footer className="reader-controls">
       <div className="voice-options">
         <span className="voice-label">系统中文语音</span>
+        <button className="ocr-toggle" aria-label="读取文字" aria-pressed={ocrEnabled} onClick={() => {
+          setOcrEnabled(!ocrEnabled); textReader.current = new TextReader(); speech.stop();
+        }}>
+          {ocr.status === 'loading' ? <LoaderCircle size={16} className="spin" /> : <ScanText size={17} />}
+          {ocr.status === 'loading' ? '文字准备中' : ocrEnabled ? '读文字' : '读文字已关'}
+        </button>
         <button className="auto-read" aria-label="自动朗读" aria-pressed={autoRead} onClick={() => {
           setAutoRead(!autoRead);
           if (!autoRead && active) read(); else speech.stop();
@@ -124,6 +184,8 @@ export default function App() {
         </button>
       </div>
       <p className="scene-caption" aria-live="polite">{narration || text}</p>
+      {!!ocr.result?.lines.length && <p className="ocr-caption">文字：{ocr.result.lines.slice(0, 4).map(line => line.text).join(' · ')}</p>}
+      {ocr.error && <p className="error-message">{ocr.error}</p>}
       {(camera.error || speech.error) && <p className="error-message" role="alert">{camera.error || speech.error}</p>}
       <button className="primary-button" disabled={loading || (active && !camera.result && !speech.speaking)} onClick={() => !active ? start() : speech.speaking ? speech.stop() : read()}>
         {loading ? <LoaderCircle size={21} className="spin" /> : !active ? <Camera size={21} /> : speech.speaking ? <Square size={18} fill="currentColor" /> : <Volume2 size={21} />}

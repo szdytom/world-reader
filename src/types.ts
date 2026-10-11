@@ -7,3 +7,10 @@ export interface FrameResult {
   detections: Detection[]; width: number; height: number;
   masks: Uint8Array; elapsed: number; inference: number;
 }
+export interface TextLine {
+  text: string; score: number; direction: Direction;
+  box: [number, number, number, number];
+}
+export interface TextResult {
+  lines: TextLine[]; width: number; height: number; elapsed: number;
+}
