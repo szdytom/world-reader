@@ -7,6 +7,3 @@ export interface FrameResult {
   detections: Detection[]; width: number; height: number;
   masks: Uint8Array; elapsed: number; inference: number;
 }
-export interface SpeechOptions {
-  engine: 'piper' | 'device'; rate: number;
-}

@@ -14,15 +14,12 @@ export const labels = [
 export function directionFor(center: number): Direction {
   return center < 1 / 3 ? '左侧' : center > 2 / 3 ? '右侧' : '中间';
 }
-export function describeScene(detections: Detection[]): string {
+export function describeScene(detections: Detection[], limit = 8): string {
   if (!detections.length) return '暂时没有识别到熟悉的物体，请缓慢移动镜头。';
   const groups = new Map<string, number>();
   for (const d of detections) {
     const key = `${d.direction}有${d.label}`;
     groups.set(key, (groups.get(key) ?? 0) + 1);
   }
-  return '画面中，' + Array.from(groups, ([key, count]) => count > 1 ? `${key}，共${count}个` : key).slice(0, 8).join('；') + '。';
-}
-export function sceneSignature(detections: Detection[]): string {
-  return detections.map(d => `${d.name}:${d.direction}`).sort().join('|');
+  return '画面中，' + Array.from(groups, ([key, count]) => count > 1 ? `${key}，共${count}个` : key).slice(0, limit).join('；') + '。';
 }

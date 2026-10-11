@@ -1,90 +1,70 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SpeechOptions } from './types';
 
-export function useSpeech(settings: SpeechOptions) {
+export function useSpeech() {
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState('');
-  const [piperReady, setPiperReady] = useState(false);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  const context = useRef<AudioContext | null>(null);
-  const source = useRef<AudioBufferSourceNode | null>(null);
-  const request = useRef<AbortController | null>(null);
+  const utterance = useRef<SpeechSynthesisUtterance | null>(null);
+  const deadline = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const token = useRef(0);
-  const url = useRef('');
 
-  const check = useCallback(async () => {
-    if (import.meta.env.VITE_STATIC_HOST === 'true') return;
-    try {
-      const response = await fetch('/api/health', { signal: AbortSignal.timeout(4000) });
-      if (!response.ok) { setPiperReady(false); return; }
-      const data = await response.json(); setPiperReady(data.piper_ready === true);
-    } catch { setPiperReady(false); }
-  }, []);
-  useEffect(() => { void check(); const interval = setInterval(check, 30000); return () => clearInterval(interval); }, [check]);
   const stop = useCallback(() => {
-    token.current++; request.current?.abort(); request.current = null;
+    token.current++;
+    clearTimeout(deadline.current);
     window.speechSynthesis?.cancel();
-    source.current?.stop(); source.current = null;
-    audio.current?.pause(); audio.current = null;
-    if (url.current) URL.revokeObjectURL(url.current); url.current = '';
+    utterance.current = null;
     setSpeaking(false);
+    setError('');
   }, []);
-  // Unlock mobile audio from the user's camera/read gesture.
-  const unlock = () => {
-    try {
-      if (!context.current || context.current.state === 'closed') context.current = new AudioContext();
-      void context.current.resume();
-    } catch { /* HTMLAudioElement remains available. */ }
-  };
-  const speak = useCallback(async (text: string) => {
-    stop(); setError(''); setSpeaking(true);
+
+  const speak = useCallback((text: string) => {
+    stop();
     const current = token.current;
     try {
-      if (settings.engine === 'device') {
-        if (!window.speechSynthesis) throw new Error('当前浏览器没有系统语音，请切换到 Piper。');
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'zh-CN'; utterance.rate = settings.rate;
-        utterance.voice = window.speechSynthesis.getVoices().find(v => v.lang.startsWith('zh')) ?? null;
-        utterance.onend = () => { if (current === token.current) setSpeaking(false); };
-        utterance.onerror = (e) => {
-          if (current !== token.current) return;
-          setSpeaking(false); if (e.error !== 'interrupted' && e.error !== 'canceled') setError('系统朗读失败，请检查中文语音是否已安装。');
-        };
-        window.speechSynthesis.speak(utterance); return true;
-      }
-      const controller = new AbortController(); request.current = controller;
-      const timeout = setTimeout(() => controller.abort(), 30000);
-      let response: Response;
-      try {
-        response = await fetch('/api/speech', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, rate: settings.rate }), signal: controller.signal });
-      } finally { clearTimeout(timeout); }
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail ?? 'Piper 尚未连接，请启动语音服务，或切换系统语音。');
-      }
-      const bytes = await response.arrayBuffer();
-      if (current !== token.current) return false;
-      if (context.current?.state === 'running') {
-        const buffer = await context.current.decodeAudioData(bytes);
-        if (current !== token.current) return false;
-        const node = context.current.createBufferSource(); node.buffer = buffer;
-        node.connect(context.current.destination); source.current = node;
-        node.onended = () => { if (current === token.current) { source.current = null; setSpeaking(false); } };
-        node.start();
-      } else {
-        url.current = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
-        const player = new Audio(url.current); audio.current = player;
-        player.onended = () => { if (current === token.current) stop(); };
-        await player.play();
-      }
+      if (!window.speechSynthesis) throw new Error('当前浏览器不支持系统朗读，请使用 Safari 或 Chrome。');
+      const message = new SpeechSynthesisUtterance(text);
+      message.lang = 'zh-CN';
+      const voices = window.speechSynthesis.getVoices();
+      message.voice = voices.find(v => /^zh[-_]CN$/i.test(v.lang))
+        ?? voices.find(v => /^zh(?:[-_]|$)/i.test(v.lang)) ?? null;
+      message.onend = () => {
+        if (current !== token.current) return;
+        clearTimeout(deadline.current);
+        utterance.current = null;
+        setSpeaking(false);
+      };
+      message.onerror = event => {
+        if (current !== token.current) return;
+        clearTimeout(deadline.current);
+        utterance.current = null;
+        setSpeaking(false);
+        if (event.error !== 'interrupted' && event.error !== 'canceled') {
+          setError(event.error === 'not-allowed' ? '浏览器需要一次点击来允许语音，请点击「朗读当前画面」。'
+            : '系统朗读失败，请检查中文语音是否已安装，然后点击重试。');
+        }
+      };
+      utterance.current = message;
+      setSpeaking(true);
+      // Some mobile voices omit the end event; do not leave auto-reading stuck.
+      deadline.current = setTimeout(() => {
+        if (current === token.current) stop();
+      }, Math.min(30000, Math.max(6000, text.length * 350 + 3000)));
+      window.speechSynthesis.resume();
+      window.speechSynthesis.speak(message);
       return true;
     } catch (e) {
-      if (current !== token.current) return false;
+      clearTimeout(deadline.current);
+      utterance.current = null;
       setSpeaking(false);
-      setError(e instanceof Error && e.name === 'AbortError' ? '语音服务响应超时，请检查连接后重试。' : e instanceof Error ? e.message : '朗读失败，请重试。');
+      setError(e instanceof Error ? e.message : '朗读失败，请重试。');
       return false;
     }
-  }, [settings.engine, settings.rate, stop]);
-  useEffect(() => () => { stop(); void context.current?.close(); }, [stop]);
-  return { speak, stop, speaking, error, piperReady, check, unlock };
+  }, [stop]);
+
+  useEffect(() => {
+    // Start loading device voices before the first camera result arrives.
+    window.speechSynthesis?.getVoices();
+    return stop;
+  }, [stop]);
+
+  return { speak, stop, speaking, error };
 }

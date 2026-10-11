@@ -47,11 +47,9 @@ export default defineConfig({
         handler: 'CacheFirst',
         options: { cacheName: 'world-reader-runtime-v1', cacheableResponse: { statuses: [200] } },
       }],
-      navigateFallbackDenylist: [/^\/api/],
       maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
     },
   })],
   worker: { format: 'es', plugins: () => [workerRuntime()] },
   optimizeDeps: { exclude: ['@ultralytics/yolo'] },
-  server: { proxy: { '/api': 'http://127.0.0.1:8000' } },
 });
