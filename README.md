@@ -70,7 +70,7 @@ SDK 默认 ORT 加载器通过 DOM 插入脚本，无法直接用于 Worker。`v
 
 OCR 在 YOLO 初始化后启动，每次取一帧，最长边最多 960 像素，检测最长边最多 640 像素。每轮完成后至少等待 2.5 秒，慢设备进一步降低扫描频率。关闭文字识别、关闭镜头或切换摄像头时终止旧 Worker，丢弃旧结果；OCR 故障不关闭摄像头或 YOLO。
 
-`src/textReader.ts` 管理文字播报：置信度低于 0.75 时忽略，低于 0.9 时至少两轮确认；同一可见文字只读一次，至少离开一分钟后重新出现才允许再次读。新文字优先于物体变化，但不会打断正在播放的语音。最多一次读三条文字，每条最多 32 字，未读条目保留到后续播报。屏幕展示当前 OCR 结果；语音显示最近播报内容。OCR 识别的是文字，不额外推断路牌图形、箭头方向或交通规则。
+`src/textReader.ts` 管理文字播报：置信度低于 0.75 时忽略，低于 0.9 时至少两轮确认；同一可见文字只读一次，至少离开一分钟后重新出现才允许再次读。新文字优先于物体变化，但不会打断正在播放的语音。最多一次读三条文字，每条最多 32 字，未读条目保留到后续播报。屏幕展示当前 OCR 结果；语音显示最近播报内容。文字模型准备期间不播报「暂时没有识别到熟悉的物体」：第一次 OCR 结果返回前保持安静，避免在读出眼前路牌之前先让用户移开镜头；画面中已确认的物体不受影响，OCR 失败时仍按物体变化播报。OCR 识别的是文字，不额外推断路牌图形、箭头方向或交通规则。
 
 远处小字、模糊、反光和快速移动会影响识别；靠近标识并稍停片刻更适合演示。RapidOCR 是成熟的多引擎 OCR 工具包，RapidOCRWeb 需要 Flask 服务；此应用选择官方 PaddleOCR.js，保持纯前端部署。
 
@@ -83,6 +83,6 @@ npm run build
 CHROMIUM_PATH=/usr/bin/chromium npm run test:e2e
 ```
 
-单元测试覆盖跨帧身份、短暂漏检、单帧误检、方位抖动、差分播报，以及 OCR 确认、去重和变化内容。浏览器测试使用公交车样例和生成的中文路牌视频，实际运行 YOLO 与 PP-OCRv6 WASM，验证物体、掩膜、中文识别、自动文字朗读、关闭功能和离线重载。语音控制测试替代操作系统发声接口，不验证实际音色。
+单元测试覆盖跨帧身份、短暂漏检、单帧误检、方位抖动、差分播报，以及 OCR 确认、去重和变化内容。浏览器测试使用公交车样例和生成的中文路牌视频，实际运行 YOLO 与 PP-OCRv6 WASM，验证物体、掩膜、中文识别、自动文字朗读、关闭功能和离线重载；路牌样例中没有任何 COCO 物体，据此确认文字模型准备期间不会误报「没有识别到物体」。语音控制测试替代操作系统发声接口，不验证实际音色。
 
 参考：[Ultralytics 浏览器 SDK](https://github.com/ultralytics/inference/tree/main/web)、[Ultralytics 跟踪模式](https://docs.ultralytics.com/modes/track/)、[ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/)、[Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis)、[PaddleOCR 浏览器部署](https://www.paddleocr.ai/main/version3.x/inference_deployment/cross_platform/browser.html)、[PP-OCRv6](https://www.paddleocr.ai/main/version3.x/algorithm/PP-OCRv6/PP-OCRv6.html)、[RapidOCRWeb](https://github.com/RapidAI/RapidOCRWeb)。Ultralytics SDK / 模型采用 AGPL-3.0 授权。

@@ -15,11 +15,12 @@ export default function App() {
   const speech = useSpeech();
   const reader = useRef(new SceneReader());
   const textReader = useRef(new TextReader());
-  const hasVisibleText = useRef(false);
   const textOverlay = useRef<HTMLCanvasElement>(null);
   const [narration, setNarration] = useState('');
   const active = camera.status === 'live';
   const ocr = useOcr(camera.video, active && camera.modelStatus === 'ready', ocrEnabled);
+  const ocrState = useRef(ocr);
+  ocrState.current = ocr;
   const loading = camera.status === 'starting' || (active && camera.modelStatus === 'loading');
   const detections = camera.result?.detections ?? [];
   const text = camera.result
@@ -44,7 +45,6 @@ export default function App() {
   }, [camera.result]);
 
   useEffect(() => {
-    hasVisibleText.current = !!ocr.result?.lines.length;
     if (ocr.result) textReader.current.observe(ocr.result.lines, Date.now());
   }, [ocr.result]);
 
@@ -61,8 +61,14 @@ export default function App() {
         }
         return;
       }
-      // Readable signs are useful results; do not ask the user to move away.
-      if (ocrEnabled && hasVisibleText.current && !reader.current.hasObjects) return;
+      // A sign may be the only thing in view, and OCR needs time to prepare.
+      // Do not announce missing objects while text may still explain the scene:
+      // the first OCR pass is pending, or it already read something. Read the
+      // latest state from a ref so this interval is not rebuilt every frame.
+      const ocrNow = ocrState.current;
+      const textExplainsScene = ocrEnabled && ocrNow.status !== 'error'
+        && (!ocrNow.result || ocrNow.result.lines.length > 0);
+      if (!reader.current.hasObjects && textExplainsScene) return;
       const message = reader.current.next(now);
       if (message && speech.speak(message)) {
         reader.current.commit(now);
